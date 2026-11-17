@@ -2,20 +2,12 @@ import config from '../../config.js'
 import { execSync } from 'child_process'
 import fs from 'fs'
 
-// ╔══════════════════════════════════╗
-// ║ ⛩️ UPDATE GITHUB ║
-// ║ 👑 Dueño: DAMIANJS-LYAS-OFC ║
-// ║ 📦 Sube SOLO lo que elijas ║
-// ║ ❌ NUNCA sube todo el bot ║
-// ╚══════════════════════════════════╝
-
 export const handler = {}
 handler.name = 'updategithub'
 handler.alias = ['upgit', 'gitpush']
 handler.category = 'owner'
 handler.owner = true
 
-// ──── 🛠️ HELPERS ────
 function getOwners() {
  return (config?.bot?.owner || [])
  .map(n => n.toString().split('@')[0].replace(/\D/g, ''))
@@ -50,83 +42,62 @@ function saveToken(token) {
  fs.writeFileSync('./db/github.json', JSON.stringify({ token, savedAt: Date.now() }))
 }
 
-// 🚫 BLOQUEADOS SIEMPRE
 const BLOCKED = ['session', 'jadiBots', 'subbots', 'node_modules', '.npm', '.env', 'temp', 'ver_temp', 'principals', '.git']
 
 function isBlocked(path) {
  return BLOCKED.some(b => path.includes(b)) || path.startsWith('.env') || path === 'db' || path.startsWith('db/')
 }
 
-// ═══════════════════════════════════════════
-// 🚀 COMANDO PRINCIPAL
-// ═══════════════════════════════════════════
 handler.exec = async (sock, m, args) => {
  const jid = m.key.remoteJid
  const q = { quoted: m }
 
- // 👑 Solo owner
- if (!isOwnerDirect(m)) return await sock.sendMessage(jid, { text: `╭─⛔ *ACCESO DENEGADO* ─╮\n│\n│ ⚠️ Solo el owner puede usar esto.\n│ 👑 @DAMIANJS-LYAS-OFC\n│\n╰──────────────────────╯` }, q)
+ if (!isOwnerDirect(m)) return await sock.sendMessage(jid, { text: `╭─⛔ *ACCESO DENEGADO* ─╮\n│\n│ ⚠️ Solo el owner puede usar esto.\n│\n╰──────────────────────╯` }, q)
  if (!fs.existsSync('.git')) return await sock.sendMessage(jid, { text: `╭─❌ *ERROR* ─╮\n│ No es repo git\n╰─────────────╯` }, q)
 
- // 🔑 Guardar token
  if (args[0] === 'token' || args[0] === '--token') {
  const t = args[1]
  if (!t) return await sock.sendMessage(jid, { text: getToken() ? `╭─✅ *TOKEN* ─╮\n│ Ya tienes token guardado.\n╰───────────────╯` : `╭─❌ *TOKEN* ─╮\n│ Usa: .updategithub token ghp_xxx\n╰────────────────╯` }, q)
  if (!t.startsWith('ghp_') && !t.startsWith('github_pat_')) return await sock.sendMessage(jid, { text: `╭─❌ *TOKEN INVÁLIDO* ─╮\n│ El token no es válido.\n╰─────────────────────╯` }, q)
  saveToken(t)
- return await sock.sendMessage(jid, { text: `╭─✅ *TOKEN GUARDADO* ─╮\n│ 🔑 Token guardado con éxito.\n│ 🔒 Guardado en db/github.json\n╰───────────────────────╯` }, q)
+ return await sock.sendMessage(jid, { text: `╭─✅ *TOKEN GUARDADO* ─╮\n│ 🔑 Token guardado con éxito.\n╰───────────────────────╯` }, q)
  }
 
- // 🔍 Check
  if (args[0] === 'check') {
  let target = args[1] || ''
  let out = exec(`git check-ignore -v "${target}" 2>&1`)
  return await sock.sendMessage(jid, { text: `╭─🔍 *CHECK* ─╮\n│ 📄 ${target}\n│\n│ ${out || '✅ No ignorado'}\n╰──────────────╯` }, q)
  }
 
- // 📖 Ayuda
  if (args.length === 0) {
  return await sock.sendMessage(jid, { text:
 `╭─⛩️ *UPDATE GITHUB* ─╮
 │
 │ 📄 *SUBIR 1 ARCHIVO:*
 │ ✦ .updategithub cmd/owner/ping.js
-│ ✦ .updategithub config.js
 │
 │ 📁 *SUBIR 1 CARPETA:*
 │ ✦ .updategithub cmd
 │ ✦ .updategithub cmd/owner
-│ ✦ .updategithub plugins
 │
 │ 💬 *CON MENSAJE:*
-│ ✦ .updategithub cmd fix cmd
 │ ✦ .updategithub cmd/owner/ping.js fix ping
 │
-│ ───────────────
 │ ❌ *BLOQUEADO:*
 │ ✗ .updategithub todo
 │ ✗ .updategithub .
 │ ✗ .updategithub --force
-│ ✗ .updategithub -f
-│
-│ 🔑 *OTROS:*
-│ ✦ .updategithub token ghp_xxx
-│ ✦ .updategithub check cmd/owner/ping.js
 │
 ╰───────────────────╯` }, q)
  }
 
- // 🚫 BLOQUEAR todo, ., --force
  let raw = args[0]
  if (['todo', '.', './', '--force', '-f', '--all', '-A', '*', 'all'].includes(raw)) {
  return await sock.sendMessage(jid, { text:
 `╭─🚫 *BLOQUEADO* ─╮
 │
 │ ❌ "${raw}" está PROHIBIDO.
-│
-│ ✅ Solo 1 archivo o 1 carpeta:
-│ ✦ .updategithub cmd
-│ ✦ .updategithub cmd/owner/ping.js
+│ ✅ Solo 1 archivo o 1 carpeta
 │
 ╰─────────────────╯` }, q)
  }
@@ -135,27 +106,11 @@ handler.exec = async (sock, m, args) => {
  let commitMsg = args.slice(1).join(' ') || `update ${target}`
 
  if (!fs.existsSync(target)) {
- return await sock.sendMessage(jid, { text:
-`╭─❌ *NO EXISTE* ─╮
-│
-│ 📄 ${target}
-│ No encontré ese archivo / carpeta.
-│
-│ ✅ Ejemplo:
-│ ✦ .updategithub cmd
-│ ✦ .updategithub cmd/owner/ping.js
-│
-╰─────────────────╯` }, q)
+ return await sock.sendMessage(jid, { text: `╭─❌ *NO EXISTE* ─╮\n│ 📄 ${target}\n│ No encontré ese archivo / carpeta.\n╰─────────────────╯` }, q)
  }
 
  if (isBlocked(target)) {
- return await sock.sendMessage(jid, { text:
-`╭─🚫 *BLOQUEADO POR SEGURIDAD* ─╮
-│
-│ 🔒 "${target}" es sensible.
-│ No se puede subir: session, db, .env, node_modules
-│
-╰─────────────────────────────╯` }, q)
+ return await sock.sendMessage(jid, { text: `╭─🚫 *BLOQUEADO POR SEGURIDAD* ─╮\n│ 🔒 "${target}" es sensible.\n╰─────────────────────────────╯` }, q)
  }
 
  let isDir = fs.statSync(target).isDirectory()
@@ -176,6 +131,7 @@ handler.exec = async (sock, m, args) => {
 │
 │ ${icon} *${tipo}:* ${target}
 │ 🌿 Branch: ${branch}
+│ 🔄 Sincronizando con GitHub primero...
 │ ⏳ Espera un momento...
 │
 ╰───────────────────╯` }, q)
@@ -183,14 +139,38 @@ handler.exec = async (sock, m, args) => {
  exec(`git config user.email "bot@clover.com"`)
  exec(`git config user.name "Clover Bot"`)
 
- // 🧹 LIMPIAR STAGING VIEJO - ESTO ES LO QUE ANTES SUBÍA TODO
+ // ──── FIX: SINCRONIZAR ANTES DE SUBIR ────
+ // 1. Guardamos TODOS los cambios sin subir nada
+ exec(`git stash push -m "updategithub-auto"`)
+ // 2. Traemos lo de GitHub
+ exec(`git fetch origin`)
+ let pull = exec(`git pull --rebase origin ${branch} 2>&1`)
+ // 3. Recuperamos TODOS los cambios locales
+ let pop = exec(`git stash pop 2>&1`)
+
+ // Si el pull falló por conflicto, abortamos sin subir nada
+ if (pull.toLowerCase().includes('conflict') || pull.toLowerCase().includes('error: cannot pull') || pop.toLowerCase().includes('conflict')) {
+ exec(`git rebase --abort 2>&1`)
+ return await sock.sendMessage(jid, { text:
+`╭─❌ *CONFLICTO* ─╮
+│
+│ GitHub y tu bot tocaron el mismo archivo.
+│ Arreglalo en la PC con:
+│ git status
+│ git add .
+│ git rebase --continue
+│
+│ Pull: ${pull.slice(0, 800)}
+│ Pop: ${pop.slice(0, 800)}
+│
+╰──────────────────╯` }, q)
+ }
+
+ // ──── AHORA SI, SOLO EL TARGET ────
  exec(`git reset`)
- // ✅ SOLO ESTA CARPETA / ARCHIVO, sin -f, sin -A global
  exec(`git add -- "${target}"`)
 
- // Ver qué quedó en staging SOLO de este target
  let stagedList = exec(`git diff --cached --name-only -- "${target}"`).split('\n').filter(Boolean)
- // Filtrar si hay algo sensible que se coló
  stagedList = stagedList.filter(f => !isBlocked(f))
 
  if (stagedList.length === 0) {
@@ -199,14 +179,17 @@ handler.exec = async (sock, m, args) => {
 │
 │ ${icon} ${target}
 │ Ya estaba todo subido.
+│ Lo demás quedó en tu PC, no se subió.
 │
 ╰──────────────────────╯` }, q)
  }
 
  exec(`git commit -m "${commitMsg.replace(/"/g, '\\"')}" -- "${target}"`)
  let push = pushUrl ? exec(`git push ${pushUrl} ${branch} 2>&1`) : exec(`git push origin ${branch} 2>&1`)
+ // No mostrar el token en el error
+ if (token) push = push.split(token).join('***TOKEN***')
 
- if (push.toLowerCase().includes('error') || push.toLowerCase().includes('failed')) {
+ if (push.toLowerCase().includes('error') || push.toLowerCase().includes('failed') || push.toLowerCase().includes('rejected')) {
  await sock.sendMessage(jid, { text:
 `╭─❌ *ERROR PUSH* ─╮
 │
