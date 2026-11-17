@@ -46,7 +46,7 @@ export const diseños = {
  for(let c of list){
  let name = c.name || c.cmd || ''
  let alias = c.alias && c.alias.length ? ` › ${c.alias.map(a => `${p}${a}`).join(' › ')}` : ''
- let desc = c.description || c.desc || c.info || ''
+ let desc = c.description || c.descripcion || c.desc || c.info || ''
  bloques += `❀ ᠀᠀ㅤ۟ ${p}${name}${alias} + _<mention>_\n`
  if(desc) bloques += `> ── 𑁪ㅤׅㅤ۫ _${desc}._\n`
  }
@@ -62,6 +62,39 @@ export const diseños = {
 ᅟᅟ︶͜︶͜︶ᅟᅟ֪ᅟ֪ᅟᅟ︶͜︶͜︶
 > (⁠◠⁠‿⁠◕⁠) Conecta un subbot utilizando el comando: *${p}code + numero*
 > ✐ Gracias por usar ${botName}
+${bloques}`.trim()
+ }
+ },
+ kawai: {
+ name: 'kawai', link: PREWEB_LINK,
+ render: ({usermcn, botName, type, cmds, users, categories, prefix, uptime, level, exp})=>{
+ let bloques = ''
+ for(let [cat, list] of categories){
+ bloques += `\n» ˚୨•(=^●ω●^=)• ⊹ ${cat.charAt(0).toUpperCase() + cat.slice(1)} ⊹\n`
+ bloques += `> ✐ Comandos de ${cat.charAt(0).toUpperCase() + cat.slice(1)}\n\n`
+ for(let c of list){
+ let aliases = ''
+ if(c.alias && Array.isArray(c.alias) && c.alias.length){
+ aliases = ' ' + c.alias.map(a=>`#${a}`).join(' ')
+ }
+ let desc = c.description || c.descripcion || c.handler?.description || c.handler?.descripcion || ''
+ // ✅ TODO CON # , NO CON .
+ bloques += `✧ #${c.name}${aliases} \n`
+ if(desc) bloques += `> ${desc}\n`
+ else bloques += `> sin descripción en este comando\n`
+ }
+ bloques += `\n`
+ }
+ // ✅ SIN FOOTER, SIN TIPO / COMANDOS / USERS / UPTIME / LYA CLUB
+ return `¡𝐇𝐨𝐥𝐚! 𝐒𝐨𝐲 ${botName} ${type}
+ᴀǫᴜɪ ᴛɪᴇɴᴇs ʟᴀ ʟɪsᴛᴀ ᴅᴇ ᴄᴏᴍᴀɴᴅᴏs
+╭┈ ↷
+│ ✐ ꒷ Developer: ᴅᴀᴍɪᴀɴᴊs-ᴏғᴄ
+│ ✐ ꒷ꕤ💎ദ soporte ෴
+│${PREWEB_LINK}
+│ ✐ ꒷ꕤ💎ദ ᴄᴀɴᴀʟ ᴏғɪᴄɪᴀʟ ෴
+│https://whatsapp.com/channel/0029VbDi2fiFnSz7Ibth1C1s
+╰─────────────────
 ${bloques}`.trim()
  }
  },
