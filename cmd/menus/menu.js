@@ -8,7 +8,13 @@ if(!config) config={bot:{prefix:['.'],name:'MASTER CLOVER',banner:BANNER_DEFAULT
 async function loadDiseño(name){
  const p = path.join(process.cwd(),'core','menudiseños.js')
  if(!fs.existsSync(p)){ console.log('[MENU] NO EXISTE core/menudiseños.js'); return null }
- try{ const mod = await import(pathToFileURL(p).href+'?t='+Date.now()); const fn = mod.getDiseño||mod.default?.getDiseño; return fn ? fn(name) : null }catch(e){ console.log('[MENU] error load diseño', e); return null }
+ try{
+ const code = fs.readFileSync(p,'utf8')
+ const b64 = Buffer.from(code).toString('base64')
+ const mod = await import(`data:text/javascript;base64,${b64}`)
+ const fn = mod.getDiseño||mod.default?.getDiseño
+ return fn ? fn(name) : null
+ }catch(e){ console.log('[MENU] error load diseño', e); return null }
 }
 export const handler={}; handler.name='menu'; handler.alias=['help','comandos']; handler.category='menus'
 function getBotType(sock){
@@ -72,19 +78,9 @@ function detectTZ(n){ let num=String(n).replace(/\D/g,''); for(let c of Object.k
 function getSaludo(h){ if(h>=5&&h<12) return 'buen Amanecer 🌅'; if(h>=12&&h<19) return 'buena tarde 🌇'; return 'buena noche 🌌' }
 function countPlugins(){ try{ let root=path.join(process.cwd(),'cmd'); let total=0; function walk(d){ for(let f of fs.readdirSync(d)){ for(let f2 of [0]){} } }; walk(root); return total }catch{ return 0 } }
 function getTotalUsers(){ try{ if(fs.existsSync('./db/database.json')){ let db=JSON.parse(fs.readFileSync('./db/database.json','utf-8')); let data=db.data||db; if(data.allUsers) return Object.keys(data.allUsers).length; else if(data.users){ let s=new Set(); for(let g in data.users) for(let u in data.users[g]) s.add(u); return s.size } } }catch{} return 0 }
-
-// ✅ CORREGIDO: antes si el usuario no existía devolvía undefined y rompía el menú
-function getUserStats(id){ 
- try{ 
- if(global.db?.data?.users?.[id]){ 
- let u=global.db.data.users[id]; 
- return {level:u.level||1, exp:u.exp||0} 
- } 
- }catch{} 
- return {level:1, exp:0}
-}
+function getUserStats(id){ try{ if(global.db?.data?.users?.[id]){ let u=global.db.data.users[id]; return {level:u.level||1, exp:u.exp||0} } }catch{} return {level:1, exp:0} }
 function fmtUptime(ms){ const s=Math.floor(ms/1000); const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60); return `${d>0?d+'d ':''}${h}h ${m}m`.trim() }
-function scanByFolder(){ try{ const categories=new Map(); const cmdRoot=path.join(process.cwd(),'cmd'); if(!fs.existsSync(cmdRoot)) return categories; const folders=fs.readdirSync(cmdRoot).filter(f=>{ try{ return fs.statSync(path.join(cmdRoot,f)).isDirectory() }catch{ return false } }); for(const folder of folders){ const fullFolder=path.join(cmdRoot,folder); const files=fs.readdirSync(fullFolder).filter(f=>f.endsWith('.js')); if(files.length===0) continue; const catName=folder.toLowerCase(); if(!categories.has(catName)) categories.set(catName,[]); for(const file of files){ const name=path.basename(file,'.js'); if(!categories.get(catName).some(c=>c.name===name)) categories.get(catName).push({name}) } categories.get(catName).sort((a,b)=>a.name.localeCompare(b.name)) } return categories }catch{ return new Map() } }
+function scanByFolder(){ try{ const categories=new Map(); const cmdRoot=path.join(process.cwd(),'cmd'); if(!fs.existsSync(cmdRoot)) return categories; const folders=fs.readdirSync(cmdRoot).filter(f=>{ try{ return fs.statSync(path.join(cmdRoot,f)).isDirectory() }catch{ return false } }); for(const folder of folders){ const fullFolder=path.join(cmdRoot,folder); const files=fs.readdirSync(fullFolder).filter(f=>f.endsWith('.js')); if(files.length===0) continue; const catName=folder.toLowerCase(); if(!categories.has(catName)) categories.set(catName,[]); for(const file of files){ const name=path.basename(file,'.js'); if(categories.get(catName).some(c=>c.name===name)) continue; let description='', descripcion='', alias=[]; try{ const txt=fs.readFileSync(path.join(fullFolder,file),'utf8'); let m1=txt.match(/handler\.description\s*=\s*['"`]([^'"`]+)['"`]/); let m2=txt.match(/handler\.descripcion\s*=\s*['"`]([^'"`]+)['"`]/); if(m1) description=m1[1]; if(m2) descripcion=m2[1]; let mA=txt.match(/handler\.alias\s*=\s*\[([^\]]+)\]/); if(mA) alias=mA[1].split(',').map(s=>s.trim().replace(/['"`]/g,'')).filter(Boolean); }catch{} categories.get(catName).push({name, description, descripcion, alias}) } categories.get(catName).sort((a,b)=>a.name.localeCompare(b.name)) } return categories }catch{ return new Map() } }
 async function sendMenu(sock, jid, m, txt, bannerToUse, botName, sender){
  const clean = String(bannerToUse).split('?')[0].toLowerCase()
  const isGif = clean.endsWith('.mp4') || clean.endsWith('.gif') || clean.endsWith('.webp')
@@ -121,10 +117,7 @@ handler.exec=async(sock,m,args,extra)=>{ try{
  const {isSub, isPrincipal, theme:savedTheme, customName, customBanner, type:botType, num:botNum}=getMyData(sock);
  const jid=m.key.remoteJid; const sender=m.key.participant||jid; const rawNum=(m.key.participant||m.key.remoteJid||'').split('@')[0]; const tz=detectTZ(rawNum); const hour=getHour(tz); const saludo=getSaludo(hour);
  if(args[0]==='debug'){ return sock.sendMessage(jid,{text:`🔍 DEBUG\nTipo: ${botType}\nNum usado: ${botNum}\nTheme: ${savedTheme}\nBanner: ${customBanner}`},{quoted:m}) }
- const temaName=(savedTheme||'normal').toLowerCase(); const temaPreview=args[0]?args[0].toLowerCase():null; const tema=await loadDiseño(temaPreview||temaName) || await loadDiseño(temaName) || await loadDiseño('normal'); const botName=customName||config.bot.name||'MASTER CLOVER'; let type='Principal'; if(isPrincipal) type='Principal'; else if(isSub) type='Sub-bot'; const usermcn=`@${sender.split('@')[0]}`; const prefix=config.bot.prefix?.[0]||'.'; const cmds=countPlugins(); const users=getTotalUsers(); 
- // ✅ CORREGIDO: blindado por si getUserStats devuelve undefined
- const {level = 1, exp = 0} = getUserStats(sender) || {level:1, exp:0}; 
- const uptime=fmtUptime(getBotUptimeMs()); const fecha=new Date().toLocaleDateString('es-PE',{timeZone:tz}); const hora=new Date().toLocaleTimeString('es-PE',{timeZone:tz}); let categories=scanByFolder(); if(categories.size===0){ categories=new Map(); for(let [,cmd] of (extra?.commands||[])){ if(!cmd?.category) continue; let cat=String(cmd.category).toLowerCase().trim(); if(!categories.has(cat)) categories.set(cat,[]); if(!categories.get(cat).some(c=>c.name===cmd.name)) categories.get(cat).push(cmd) } } let all=[...categories.entries()]; let menus=all.find(([k])=>k==='menus'); let others=all.filter(([k])=>k!=='menus').sort((a,b)=>b[1].length-a[1].length); if(menus) all=[menus,...others]; else all=others; categories=new Map(all);
+ const temaName=(savedTheme||'normal').toLowerCase(); const temaPreview=args[0]?args[0].toLowerCase():null; const tema=await loadDiseño(temaPreview||temaName) || await loadDiseño(temaName) || await loadDiseño('normal'); const botName=customName||config.bot.name||'MASTER CLOVER'; let type='Principal'; if(isPrincipal) type='Principal'; else if(isSub) type='Sub-bot'; const usermcn=`@${sender.split('@')[0]}`; const prefix=config.bot.prefix?.[0]||'.'; const cmds=countPlugins(); const users=getTotalUsers(); const {level = 1, exp = 0} = getUserStats(sender) || {level:1, exp:0}; const uptime=fmtUptime(getBotUptimeMs()); const fecha=new Date().toLocaleDateString('es-PE',{timeZone:tz}); const hora=new Date().toLocaleTimeString('es-PE',{timeZone:tz}); let categories=scanByFolder(); if(categories.size===0){ categories=new Map(); for(let [,cmd] of (extra?.commands||[])){ if(!cmd?.category) continue; let cat=String(cmd.category).toLowerCase().trim(); if(!categories.has(cat)) categories.set(cat,[]); if(!categories.get(cat).some(c=>c.name===cmd.name)) categories.get(cat).push(cmd) } } let all=[...categories.entries()]; let menus=all.find(([k])=>k==='menus'); let others=all.filter(([k])=>k!=='menus').sort((a,b)=>b[1].length-a[1].length); if(menus) all=[menus,...others]; else all=others; categories=new Map(all);
  let txt = 'Menu no cargado'
  if(tema && tema.render){ txt=tema.render({usermcn, botName, type, saludo, cmds, users, categories, prefix, uptime, level, exp, fecha, hora}) } else { txt=`Hola ${usermcn} Soy ${botName}\nComandos: ${cmds}\n${PREWEB_LINK}` }
  if(!txt.includes(PREWEB_LINK)) txt = txt.trim() + `\n\n${PREWEB_LINK}`
