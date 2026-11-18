@@ -1,6 +1,8 @@
 import config from '../../config.js'
 import { execSync } from 'child_process'
 import fs from 'fs'
+import path from 'path'
+import sharp from 'sharp'
 
 export const handler = {}
 handler.name = 'updategithub'
@@ -48,29 +50,99 @@ function isBlocked(path) {
  return BLOCKED.some(b => path.includes(b)) || path.startsWith('.env') || path === 'db' || path.startsWith('db/')
 }
 
+// ──── MISMO TRUCO DE DOCUMENTO DEL PING / .s ────
+function cleanId(v){ return String(v||'').split('@')[0].split(':')[0].replace(/\D/g,'') }
+function getBotNum(sock){ return cleanId(sock?.principalNumber || sock?.subNumber || sock?.user?.id?.split(':')[0] || '') }
+
+function getBotName(sock, botNum){
+ if(sock.principalConfig?.name) return sock.principalConfig.name
+ if(sock.subConfig?.name) return sock.subConfig.name
+ for(let p of [
+ path.join(process.cwd(),'principals',botNum,'config.json'),
+ path.join(process.cwd(),'subbots',botNum,'config.json'),
+ path.join(process.cwd(),'jadiBots',botNum,'config.json'),
+ ]){
+ if(fs.existsSync(p)){ try{ let j=JSON.parse(fs.readFileSync(p,'utf8')); if(j.name) return j.name }catch{} }
+ }
+ return 'Master Clover'
+}
+
+async function sendIconDoc(sock, jid, m, captionText){
+ try{
+ let num = getBotNum(sock)
+ const botName = getBotName(sock, num)
+ const dbIconDir = path.join(process.cwd(), 'db', 'icon')
+ const posibles = [
+ sock.subConfig?.icon,
+ sock.principalConfig?.icon,
+ path.join(dbIconDir, num + '.jpg'),
+ path.join(dbIconDir, num + '.png'),
+ path.join(dbIconDir, num + '.webp'),
+ path.join(dbIconDir, 'main.jpg')
+ ]
+ let iconPath = null
+ for(const p of posibles){
+ if(!p) continue
+ if(String(p).startsWith('http')) continue
+ const full = path.isAbsolute(p) ? p : path.join(process.cwd(), p)
+ if(fs.existsSync(full)){ iconPath = full; break }
+ }
+ if(!iconPath && fs.existsSync(dbIconDir)){
+ const files = fs.readdirSync(dbIconDir).filter(f => /\.(jpg|jpeg|png|webp)$/i.test(f))
+ if(files.length) iconPath = path.join(dbIconDir, files[0])
+ }
+ if(!iconPath) return sock.sendMessage(jid, { text: captionText }, { quoted: m })
+ const original = fs.readFileSync(iconPath)
+ const preview = await sharp(original).rotate().resize(160,160,{fit:'inside',withoutEnlargement:true}).jpeg({quality:65}).toBuffer({resolveWithObject:true})
+ const metadataImg = await sharp(original).metadata()
+ const formatos = {
+ jpeg: ['jpg','image/jpeg'],
+ png: ['png','image/png'],
+ webp: ['webp','image/webp'],
+ gif: ['gif','image/gif'],
+ avif: ['avif','image/avif'],
+ tiff: ['tiff','image/tiff']
+ }
+ let cleanName = String(botName).replace(/[\\/:*?"<>|\r\n]/g,'').trim() || 'Bot'
+ const extInfo = formatos[metadataImg.format] || [path.extname(iconPath).slice(1).toLowerCase() || 'jpg','image/jpeg']
+ return await sock.sendMessage(jid, {
+ document: original,
+ fileName: cleanName + '.' + extInfo[0],
+ mimetype: extInfo[1],
+ jpegThumbnail: preview.data.toString('base64'),
+ thumbnailWidth: preview.info.width,
+ thumbnailHeight: preview.info.height,
+ caption: captionText
+ }, { quoted: m })
+ }catch(e){
+ return sock.sendMessage(jid, { text: captionText }, { quoted: m })
+ }
+}
+
 handler.exec = async (sock, m, args) => {
  const jid = m.key.remoteJid
  const q = { quoted: m }
+ const send = (txt) => sendIconDoc(sock, jid, m, txt)
 
- if (!isOwnerDirect(m)) return await sock.sendMessage(jid, { text: `╭─⛔ *ACCESO DENEGADO* ─╮\n│\n│ ⚠️ Solo el owner puede usar esto.\n│\n╰──────────────────────╯` }, q)
- if (!fs.existsSync('.git')) return await sock.sendMessage(jid, { text: `╭─❌ *ERROR* ─╮\n│ No es repo git\n╰─────────────╯` }, q)
+ if (!isOwnerDirect(m)) return await send(`╭─⛔ *ACCESO DENEGADO* ─╮\n│\n│ ⚠️ Solo el owner puede usar esto.\n│\n╰──────────────────────╯`)
+ if (!fs.existsSync('.git')) return await send(`╭─❌ *ERROR* ─╮\n│ No es repo git\n╰─────────────╯`)
 
  if (args[0] === 'token' || args[0] === '--token') {
  const t = args[1]
- if (!t) return await sock.sendMessage(jid, { text: getToken() ? `╭─✅ *TOKEN* ─╮\n│ Ya tienes token guardado.\n╰───────────────╯` : `╭─❌ *TOKEN* ─╮\n│ Usa: .updategithub token ghp_xxx\n╰────────────────╯` }, q)
- if (!t.startsWith('ghp_') && !t.startsWith('github_pat_')) return await sock.sendMessage(jid, { text: `╭─❌ *TOKEN INVÁLIDO* ─╮\n│ El token no es válido.\n╰─────────────────────╯` }, q)
+ if (!t) return await send(getToken() ? `╭─✅ *TOKEN* ─╮\n│ Ya tienes token guardado.\n╰───────────────╯` : `╭─❌ *TOKEN* ─╮\n│ Usa: .updategithub token ghp_xxx\n╰────────────────╯`)
+ if (!t.startsWith('ghp_') && !t.startsWith('github_pat_')) return await send(`╭─❌ *TOKEN INVÁLIDO* ─╮\n│ El token no es válido.\n╰─────────────────────╯`)
  saveToken(t)
- return await sock.sendMessage(jid, { text: `╭─✅ *TOKEN GUARDADO* ─╮\n│ 🔑 Token guardado con éxito.\n╰───────────────────────╯` }, q)
+ return await send(`╭─✅ *TOKEN GUARDADO* ─╮\n│ 🔑 Token guardado con éxito.\n│ 🔒 Guardado en db/github.json\n╰───────────────────────╯`)
  }
 
  if (args[0] === 'check') {
  let target = args[1] || ''
  let out = exec(`git check-ignore -v "${target}" 2>&1`)
- return await sock.sendMessage(jid, { text: `╭─🔍 *CHECK* ─╮\n│ 📄 ${target}\n│\n│ ${out || '✅ No ignorado'}\n╰──────────────╯` }, q)
+ return await send(`╭─🔍 *CHECK* ─╮\n│ 📄 ${target}\n│\n│ ${out || '✅ No ignorado'}\n╰──────────────╯`)
  }
 
  if (args.length === 0) {
- return await sock.sendMessage(jid, { text:
+ return await send(
 `╭─⛩️ *UPDATE GITHUB* ─╮
 │
 │ 📄 *SUBIR 1 ARCHIVO:*
@@ -88,29 +160,29 @@ handler.exec = async (sock, m, args) => {
 │ ✗ .updategithub .
 │ ✗ .updategithub --force
 │
-╰───────────────────╯` }, q)
+╰───────────────────╯`)
  }
 
  let raw = args[0]
  if (['todo', '.', './', '--force', '-f', '--all', '-A', '*', 'all'].includes(raw)) {
- return await sock.sendMessage(jid, { text:
+ return await send(
 `╭─🚫 *BLOQUEADO* ─╮
 │
 │ ❌ "${raw}" está PROHIBIDO.
 │ ✅ Solo 1 archivo o 1 carpeta
 │
-╰─────────────────╯` }, q)
+╰─────────────────╯`)
  }
 
  let target = raw
  let commitMsg = args.slice(1).join(' ') || `update ${target}`
 
  if (!fs.existsSync(target)) {
- return await sock.sendMessage(jid, { text: `╭─❌ *NO EXISTE* ─╮\n│ 📄 ${target}\n│ No encontré ese archivo / carpeta.\n╰─────────────────╯` }, q)
+ return await send(`╭─❌ *NO EXISTE* ─╮\n│ 📄 ${target}\n│ No encontré ese archivo / carpeta.\n╰─────────────────╯`)
  }
 
  if (isBlocked(target)) {
- return await sock.sendMessage(jid, { text: `╭─🚫 *BLOQUEADO POR SEGURIDAD* ─╮\n│ 🔒 "${target}" es sensible.\n╰─────────────────────────────╯` }, q)
+ return await send(`╭─🚫 *BLOQUEADO POR SEGURIDAD* ─╮\n│ 🔒 "${target}" es sensible.\n╰─────────────────────────────╯`)
  }
 
  let isDir = fs.statSync(target).isDirectory()
@@ -126,7 +198,7 @@ handler.exec = async (sock, m, args) => {
  pushUrl = `https://${token}@${clean}`
  }
 
- await sock.sendMessage(jid, { text:
+ await send(
 `╭─⛩️ *SUBIENDO...* ─╮
 │
 │ ${icon} *${tipo}:* ${target}
@@ -134,24 +206,19 @@ handler.exec = async (sock, m, args) => {
 │ 🔄 Sincronizando con GitHub primero...
 │ ⏳ Espera un momento...
 │
-╰───────────────────╯` }, q)
+╰───────────────────╯`)
 
  exec(`git config user.email "bot@clover.com"`)
  exec(`git config user.name "Clover Bot"`)
 
- // ──── FIX: SINCRONIZAR ANTES DE SUBIR ────
- // 1. Guardamos TODOS los cambios sin subir nada
  exec(`git stash push -m "updategithub-auto"`)
- // 2. Traemos lo de GitHub
  exec(`git fetch origin`)
  let pull = exec(`git pull --rebase origin ${branch} 2>&1`)
- // 3. Recuperamos TODOS los cambios locales
  let pop = exec(`git stash pop 2>&1`)
 
- // Si el pull falló por conflicto, abortamos sin subir nada
  if (pull.toLowerCase().includes('conflict') || pull.toLowerCase().includes('error: cannot pull') || pop.toLowerCase().includes('conflict')) {
  exec(`git rebase --abort 2>&1`)
- return await sock.sendMessage(jid, { text:
+ return await send(
 `╭─❌ *CONFLICTO* ─╮
 │
 │ GitHub y tu bot tocaron el mismo archivo.
@@ -163,10 +230,9 @@ handler.exec = async (sock, m, args) => {
 │ Pull: ${pull.slice(0, 800)}
 │ Pop: ${pop.slice(0, 800)}
 │
-╰──────────────────╯` }, q)
+╰──────────────────╯`)
  }
 
- // ──── AHORA SI, SOLO EL TARGET ────
  exec(`git reset`)
  exec(`git add -- "${target}"`)
 
@@ -174,30 +240,24 @@ handler.exec = async (sock, m, args) => {
  stagedList = stagedList.filter(f => !isBlocked(f))
 
  if (stagedList.length === 0) {
- return await sock.sendMessage(jid, { text:
+ return await send(
 `╭─✅ *NADA PARA SUBIR* ─╮
 │
 │ ${icon} ${target}
 │ Ya estaba todo subido.
 │ Lo demás quedó en tu PC, no se subió.
 │
-╰──────────────────────╯` }, q)
+╰──────────────────────╯`)
  }
 
  exec(`git commit -m "${commitMsg.replace(/"/g, '\\"')}" -- "${target}"`)
  let push = pushUrl ? exec(`git push ${pushUrl} ${branch} 2>&1`) : exec(`git push origin ${branch} 2>&1`)
- // No mostrar el token en el error
  if (token) push = push.split(token).join('***TOKEN***')
 
  if (push.toLowerCase().includes('error') || push.toLowerCase().includes('failed') || push.toLowerCase().includes('rejected')) {
- await sock.sendMessage(jid, { text:
-`╭─❌ *ERROR PUSH* ─╮
-│
-│ ${push.slice(0, 2500)}
-│
-╰──────────────────╯` }, q)
+ await send(`╭─❌ *ERROR PUSH* ─╮\n│\n│ ${push.slice(0, 2500)}\n│\n╰──────────────────╯`)
  } else {
- await sock.sendMessage(jid, { text:
+ await send(
 `╭─✅ *PUSH EXITOSO* ─╮
 │
 │ ${icon} *SOLO SE SUBIÓ:*
@@ -210,7 +270,7 @@ ${stagedList.length > 20 ? `│ ... y ${stagedList.length - 20} más` : ''}
 │ 📌 ${exec('git log -1 --oneline')}
 │ 🌿 Branch: ${branch}
 │
-╰────────────────────╯` }, q)
+╰────────────────────╯`)
  }
 }
 
